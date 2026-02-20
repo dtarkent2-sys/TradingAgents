@@ -121,15 +121,15 @@ def create_parallel_research_node(bull_fn, bear_fn):
         t0 = time.time()
 
         def run_bull():
-            logger.info("Bull researcher starting")
+            print(f"[PARALLEL] Bull starting at +{time.time()-t0:.1f}s", flush=True)
             result = bull_fn(state_snap)
-            logger.info("Bull researcher done in %.1fs", time.time() - t0)
+            print(f"[PARALLEL] Bull done at +{time.time()-t0:.1f}s", flush=True)
             return result
 
         def run_bear():
-            logger.info("Bear researcher starting")
+            print(f"[PARALLEL] Bear starting at +{time.time()-t0:.1f}s", flush=True)
             result = bear_fn(state_snap)
-            logger.info("Bear researcher done in %.1fs", time.time() - t0)
+            print(f"[PARALLEL] Bear done at +{time.time()-t0:.1f}s", flush=True)
             return result
 
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -138,7 +138,7 @@ def create_parallel_research_node(bull_fn, bear_fn):
             bull_result = bull_future.result()
             bear_result = bear_future.result()
 
-        logger.info("Parallel research total: %.1fs", time.time() - t0)
+        print(f"[PARALLEL] Research total: {time.time()-t0:.1f}s", flush=True)
 
         bull_debate = bull_result["investment_debate_state"]
         bear_debate = bear_result["investment_debate_state"]
@@ -173,21 +173,21 @@ def create_parallel_risk_node(aggressive_fn, conservative_fn, neutral_fn):
         t0 = time.time()
 
         def run_agg():
-            logger.info("Aggressive analyst starting")
+            print(f"[PARALLEL] Aggressive starting at +{time.time()-t0:.1f}s", flush=True)
             result = aggressive_fn(state_snap)
-            logger.info("Aggressive analyst done in %.1fs", time.time() - t0)
+            print(f"[PARALLEL] Aggressive done at +{time.time()-t0:.1f}s", flush=True)
             return result
 
         def run_con():
-            logger.info("Conservative analyst starting")
+            print(f"[PARALLEL] Conservative starting at +{time.time()-t0:.1f}s", flush=True)
             result = conservative_fn(state_snap)
-            logger.info("Conservative analyst done in %.1fs", time.time() - t0)
+            print(f"[PARALLEL] Conservative done at +{time.time()-t0:.1f}s", flush=True)
             return result
 
         def run_neu():
-            logger.info("Neutral analyst starting")
+            print(f"[PARALLEL] Neutral starting at +{time.time()-t0:.1f}s", flush=True)
             result = neutral_fn(state_snap)
-            logger.info("Neutral analyst done in %.1fs", time.time() - t0)
+            print(f"[PARALLEL] Neutral done at +{time.time()-t0:.1f}s", flush=True)
             return result
 
         with ThreadPoolExecutor(max_workers=3) as pool:
