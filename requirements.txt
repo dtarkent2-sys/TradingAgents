@@ -14,7 +14,9 @@ requests
 tqdm
 pytz
 redis
-chainlit
+fastapi
+uvicorn[standard]
+sse-starlette
 rich
 typer
 questionary

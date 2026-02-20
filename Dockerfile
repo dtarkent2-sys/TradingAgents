@@ -12,5 +12,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Chainlit listens on $PORT (Railway sets this automatically)
-CMD chainlit run app.py --host 0.0.0.0 --port ${PORT:-8000}
+CMD uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}
