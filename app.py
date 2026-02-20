@@ -300,6 +300,19 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
         for agent in buf.agent_status:
             buf.update_agent_status(agent, "completed")
         st = get_stats_dict(stats_handler, buf, start_time)
+        # Emit agent_update for any agents not yet shown as completed on the client
+        for agent, status in buf.agent_status.items():
+            if prev_statuses.get(agent) != "completed":
+                prev_statuses[agent] = "completed"
+                evt = {
+                    "type": "agent_update",
+                    "agent": agent,
+                    "stage": _agent_stage(agent),
+                    "status": "completed",
+                    "stats": st,
+                }
+                state["events"].append(evt)
+                await q.put(evt)
         evt = {
             "type": "decision",
             "stage": "decision",
