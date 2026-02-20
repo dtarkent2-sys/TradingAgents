@@ -239,6 +239,8 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                 trader_emitted = True
                 buf.update_agent_status("Trader", "completed")
                 buf.update_agent_status("Aggressive Analyst", "in_progress")
+                buf.update_agent_status("Conservative Analyst", "in_progress")
+                buf.update_agent_status("Neutral Analyst", "in_progress")
                 buf.update_report_section("trader_investment_plan", chunk["trader_investment_plan"])
                 evt = {
                     "type": "trader",

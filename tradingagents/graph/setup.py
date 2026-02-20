@@ -9,7 +9,11 @@ from tradingagents.agents import *
 from tradingagents.agents.utils.agent_states import AgentState
 
 from .conditional_logic import ConditionalLogic
-from .parallel_analysts import create_parallel_analyst_node
+from .parallel_analysts import (
+    create_parallel_analyst_node,
+    create_parallel_research_node,
+    create_parallel_risk_node,
+)
 
 
 class GraphSetup:
@@ -126,23 +130,49 @@ class GraphSetup:
                 )
                 workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
 
-        # Add other nodes
-        workflow.add_node("Bull Researcher", bull_researcher_node)
-        workflow.add_node("Bear Researcher", bear_researcher_node)
-        workflow.add_node("Research Manager", research_manager_node)
-        workflow.add_node("Trader", trader_node)
-        workflow.add_node("Aggressive Analyst", aggressive_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Conservative Analyst", conservative_analyst)
-        workflow.add_node("Risk Judge", risk_manager_node)
-
-        # Define edges
         if parallel:
-            # Parallel: START → Parallel Analysts → Bull Researcher
+            # --- Parallel mode ---
+            # Analysts: single parallel node
+            # Research: Bull+Bear run concurrently in one node
+            # Risk: Agg+Con+Neu run concurrently in one node
+
+            parallel_research = create_parallel_research_node(
+                bull_researcher_node, bear_researcher_node
+            )
+            parallel_risk = create_parallel_risk_node(
+                aggressive_analyst, conservative_analyst, neutral_analyst
+            )
+
+            workflow.add_node("Research Manager", research_manager_node)
+            workflow.add_node("Trader", trader_node)
+            workflow.add_node("Parallel Research", parallel_research)
+            workflow.add_node("Parallel Risk", parallel_risk)
+            workflow.add_node("Risk Judge", risk_manager_node)
+
+            # Parallel Analysts → Parallel Research → Manager → Trader → Parallel Risk → Judge → END
             workflow.add_edge(START, "Parallel Analysts")
-            workflow.add_edge("Parallel Analysts", "Bull Researcher")
+            workflow.add_edge("Parallel Analysts", "Parallel Research")
+            workflow.add_edge("Parallel Research", "Research Manager")
+            workflow.add_edge("Research Manager", "Trader")
+            workflow.add_edge("Trader", "Parallel Risk")
+            workflow.add_edge("Parallel Risk", "Risk Judge")
+            workflow.add_edge("Risk Judge", END)
+
         else:
-            # Sequential: START → Analyst 1 → ... → Analyst N → Bull Researcher
+            # --- Sequential mode ---
+            # Individual analyst nodes with tool-calling loops
+            # Bull/Bear debate with conditional routing
+            # Agg/Con/Neu risk debate with conditional routing
+
+            workflow.add_node("Bull Researcher", bull_researcher_node)
+            workflow.add_node("Bear Researcher", bear_researcher_node)
+            workflow.add_node("Research Manager", research_manager_node)
+            workflow.add_node("Trader", trader_node)
+            workflow.add_node("Aggressive Analyst", aggressive_analyst)
+            workflow.add_node("Neutral Analyst", neutral_analyst)
+            workflow.add_node("Conservative Analyst", conservative_analyst)
+            workflow.add_node("Risk Judge", risk_manager_node)
+
             first_analyst = selected_analysts[0]
             workflow.add_edge(START, f"{first_analyst.capitalize()} Analyst")
 
@@ -164,51 +194,50 @@ class GraphSetup:
                 else:
                     workflow.add_edge(current_clear, "Bull Researcher")
 
-        # Add remaining edges (same for both modes)
-        workflow.add_conditional_edges(
-            "Bull Researcher",
-            self.conditional_logic.should_continue_debate,
-            {
-                "Bear Researcher": "Bear Researcher",
-                "Research Manager": "Research Manager",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Bear Researcher",
-            self.conditional_logic.should_continue_debate,
-            {
-                "Bull Researcher": "Bull Researcher",
-                "Research Manager": "Research Manager",
-            },
-        )
-        workflow.add_edge("Research Manager", "Trader")
-        workflow.add_edge("Trader", "Aggressive Analyst")
-        workflow.add_conditional_edges(
-            "Aggressive Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Conservative Analyst": "Conservative Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Conservative Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Neutral Analyst": "Neutral Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Neutral Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Aggressive Analyst": "Aggressive Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
+            workflow.add_conditional_edges(
+                "Bull Researcher",
+                self.conditional_logic.should_continue_debate,
+                {
+                    "Bear Researcher": "Bear Researcher",
+                    "Research Manager": "Research Manager",
+                },
+            )
+            workflow.add_conditional_edges(
+                "Bear Researcher",
+                self.conditional_logic.should_continue_debate,
+                {
+                    "Bull Researcher": "Bull Researcher",
+                    "Research Manager": "Research Manager",
+                },
+            )
+            workflow.add_edge("Research Manager", "Trader")
+            workflow.add_edge("Trader", "Aggressive Analyst")
+            workflow.add_conditional_edges(
+                "Aggressive Analyst",
+                self.conditional_logic.should_continue_risk_analysis,
+                {
+                    "Conservative Analyst": "Conservative Analyst",
+                    "Risk Judge": "Risk Judge",
+                },
+            )
+            workflow.add_conditional_edges(
+                "Conservative Analyst",
+                self.conditional_logic.should_continue_risk_analysis,
+                {
+                    "Neutral Analyst": "Neutral Analyst",
+                    "Risk Judge": "Risk Judge",
+                },
+            )
+            workflow.add_conditional_edges(
+                "Neutral Analyst",
+                self.conditional_logic.should_continue_risk_analysis,
+                {
+                    "Aggressive Analyst": "Aggressive Analyst",
+                    "Risk Judge": "Risk Judge",
+                },
+            )
 
-        workflow.add_edge("Risk Judge", END)
+            workflow.add_edge("Risk Judge", END)
 
         # Compile and return
         return workflow.compile()

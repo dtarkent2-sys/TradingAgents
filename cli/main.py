@@ -820,6 +820,7 @@ def update_analyst_statuses(message_buffer, chunk):
     if not found_active and selected:
         if message_buffer.agent_status.get("Bull Researcher") == "pending":
             message_buffer.update_agent_status("Bull Researcher", "in_progress")
+            message_buffer.update_agent_status("Bear Researcher", "in_progress")
 
 def extract_content_string(content):
     """Extract string content from various message formats.

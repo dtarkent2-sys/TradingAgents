@@ -1,7 +1,9 @@
-"""Parallel analyst execution for TradingAgents.
+"""Parallel execution nodes for TradingAgents.
 
-Runs all analyst agents (Market, Social, News, Fundamentals) concurrently
-instead of sequentially, cutting the analyst phase from ~8-9 min to ~2-3 min.
+Provides parallel wrappers for:
+- Analyst phase (Market, Social, News, Fundamentals)
+- Research debate phase (Bull + Bear)
+- Risk debate phase (Aggressive + Conservative + Neutral)
 """
 
 import asyncio
@@ -74,3 +76,81 @@ def create_parallel_analyst_node(analyst_fns, tool_nodes, selected_analysts):
         return merged
 
     return parallel_analysts_node
+
+
+def create_parallel_research_node(bull_fn, bear_fn):
+    """Create a node that runs Bull and Bear researchers in parallel.
+
+    Both agents receive the same state (reports + empty debate state) and
+    produce independent arguments. Results are merged into a single
+    investment_debate_state with both histories and count=2.
+    """
+
+    async def parallel_research_node(state):
+        bull_result, bear_result = await asyncio.gather(
+            asyncio.to_thread(bull_fn, state),
+            asyncio.to_thread(bear_fn, state),
+        )
+
+        bull_debate = bull_result["investment_debate_state"]
+        bear_debate = bear_result["investment_debate_state"]
+
+        merged_debate = {
+            "bull_history": bull_debate.get("bull_history", ""),
+            "bear_history": bear_debate.get("bear_history", ""),
+            "history": bull_debate.get("bull_history", "")
+            + "\n"
+            + bear_debate.get("bear_history", ""),
+            "current_response": bear_debate.get("current_response", ""),
+            "judge_decision": "",
+            "count": 2,
+        }
+        return {"investment_debate_state": merged_debate}
+
+    return parallel_research_node
+
+
+def create_parallel_risk_node(aggressive_fn, conservative_fn, neutral_fn):
+    """Create a node that runs all 3 risk analysts in parallel.
+
+    All agents receive the same state (trader plan + empty risk debate state)
+    and produce independent arguments. Results are merged into a single
+    risk_debate_state with all histories and count=3.
+    """
+
+    async def parallel_risk_node(state):
+        agg_result, con_result, neu_result = await asyncio.gather(
+            asyncio.to_thread(aggressive_fn, state),
+            asyncio.to_thread(conservative_fn, state),
+            asyncio.to_thread(neutral_fn, state),
+        )
+
+        agg_debate = agg_result["risk_debate_state"]
+        con_debate = con_result["risk_debate_state"]
+        neu_debate = neu_result["risk_debate_state"]
+
+        merged_debate = {
+            "aggressive_history": agg_debate.get("aggressive_history", ""),
+            "conservative_history": con_debate.get("conservative_history", ""),
+            "neutral_history": neu_debate.get("neutral_history", ""),
+            "history": agg_debate.get("aggressive_history", "")
+            + "\n"
+            + con_debate.get("conservative_history", "")
+            + "\n"
+            + neu_debate.get("neutral_history", ""),
+            "latest_speaker": "Neutral",
+            "current_aggressive_response": agg_debate.get(
+                "current_aggressive_response", ""
+            ),
+            "current_conservative_response": con_debate.get(
+                "current_conservative_response", ""
+            ),
+            "current_neutral_response": neu_debate.get(
+                "current_neutral_response", ""
+            ),
+            "judge_decision": "",
+            "count": 3,
+        }
+        return {"risk_debate_state": merged_debate}
+
+    return parallel_risk_node
