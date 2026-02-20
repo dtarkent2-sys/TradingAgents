@@ -152,8 +152,12 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
         prev_statuses[agent_name] = "in_progress"
 
     print(f"[ANALYSIS] Starting graph stream, events so far: {len(state['events'])}", flush=True)
+    chunk_count = 0
     try:
         async for chunk in graph.graph.astream(init_state, **args):
+            chunk_count += 1
+            chunk_keys = [k for k in chunk if chunk.get(k) and k != "messages"]
+            print(f"[ANALYSIS] Chunk #{chunk_count}, keys with data: {chunk_keys[:10]}", flush=True)
             final_state = chunk
 
             # Process messages (same logic as Chainlit app)
@@ -285,6 +289,8 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                     await q.put(evt)
 
     except Exception as e:
+        import traceback as _tb2
+        print(f"[ANALYSIS] ERROR in stream loop: {e}\n{_tb2.format_exc()}", flush=True)
         evt = {"type": "error", "message": str(e)}
         state["events"].append(evt)
         await q.put(evt)
