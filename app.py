@@ -285,7 +285,11 @@ async def stream_analysis(analysis_id: str):
 
     async def event_generator():
         while True:
-            event = await q.get()
+            try:
+                event = await asyncio.wait_for(q.get(), timeout=15)
+            except asyncio.TimeoutError:
+                yield {"event": "heartbeat", "data": ""}
+                continue
             if event is None:
                 break
             yield {"data": json.dumps(event)}
