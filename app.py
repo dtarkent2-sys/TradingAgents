@@ -53,6 +53,7 @@ def build_config():
         "fundamental_data": "yfinance",
         "news_data": "yfinance",
     }
+    config["parallel_analysts"] = True
     return config
 
 
@@ -121,6 +122,28 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     risk_emitted = False
     final_state = None
     prev_statuses = {}
+
+    # Emit all analysts as "in_progress" immediately (they run in parallel)
+    analyst_name_map = {
+        "market": "Market Analyst",
+        "social": "Social Analyst",
+        "news": "News Analyst",
+        "fundamentals": "Fundamentals Analyst",
+    }
+    for analyst_type in selected_analysts:
+        agent_name = analyst_name_map[analyst_type]
+        buf.update_agent_status(agent_name, "in_progress")
+        st = get_stats_dict(stats_handler, buf, start_time)
+        evt = {
+            "type": "agent_update",
+            "agent": agent_name,
+            "stage": "analysts",
+            "status": "in_progress",
+            "stats": st,
+        }
+        state["events"].append(evt)
+        await q.put(evt)
+        prev_statuses[agent_name] = "in_progress"
 
     try:
         async for chunk in graph.graph.astream(init_state, **args):
