@@ -92,6 +92,8 @@ def _agent_stage(agent_name):
 
 async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     """Background task that runs the TradingAgents pipeline and pushes SSE events."""
+    import traceback as _tb
+    print(f"[ANALYSIS] Starting analysis {analysis_id} for {ticker}", flush=True)
     state = analyses[analysis_id]
     q = state["queue"]
     config = build_config()
@@ -99,13 +101,16 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     selected_analysts = ["market", "social", "news", "fundamentals"]
 
     try:
+        print("[ANALYSIS] Creating TradingAgentsGraph...", flush=True)
         graph = TradingAgentsGraph(
             selected_analysts=selected_analysts,
             debug=False,
             config=config,
             callbacks=[stats_handler],
         )
+        print("[ANALYSIS] Graph created successfully", flush=True)
     except Exception as e:
+        print(f"[ANALYSIS] Init failed: {e}\n{_tb.format_exc()}", flush=True)
         await q.put({"type": "error", "message": f"Init failed: {e}"})
         await q.put(None)
         return
@@ -124,6 +129,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     prev_statuses = {}
 
     # Emit all analysts as "in_progress" immediately (they run in parallel)
+    print("[ANALYSIS] Emitting in_progress for all analysts", flush=True)
     analyst_name_map = {
         "market": "Market Analyst",
         "social": "Social Analyst",
@@ -145,6 +151,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
         await q.put(evt)
         prev_statuses[agent_name] = "in_progress"
 
+    print(f"[ANALYSIS] Starting graph stream, events so far: {len(state['events'])}", flush=True)
     try:
         async for chunk in graph.graph.astream(init_state, **args):
             final_state = chunk
