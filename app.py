@@ -205,8 +205,9 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                     state["events"].append(evt)
                     await q.put(evt)
 
-            # Research debate
-            if chunk.get("investment_debate_state"):
+            # Research debate (guard with research_emitted to avoid resetting
+            # statuses on subsequent chunks in stream_mode="values")
+            if chunk.get("investment_debate_state") and not research_emitted:
                 debate = chunk["investment_debate_state"]
                 bull = debate.get("bull_history", "").strip()
                 bear = debate.get("bear_history", "").strip()
@@ -216,7 +217,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                     for a in ("Bull Researcher", "Bear Researcher", "Research Manager"):
                         buf.update_agent_status(a, "in_progress")
 
-                if judge and not research_emitted:
+                if judge:
                     research_emitted = True
                     for a in ("Bull Researcher", "Bear Researcher", "Research Manager"):
                         buf.update_agent_status(a, "completed")
@@ -248,8 +249,9 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                 state["events"].append(evt)
                 await q.put(evt)
 
-            # Risk debate
-            if chunk.get("risk_debate_state"):
+            # Risk debate (guard with risk_emitted to avoid resetting
+            # statuses on subsequent chunks in stream_mode="values")
+            if chunk.get("risk_debate_state") and not risk_emitted:
                 risk = chunk["risk_debate_state"]
                 agg = risk.get("aggressive_history", "").strip()
                 con = risk.get("conservative_history", "").strip()
@@ -263,7 +265,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                 if neu:
                     buf.update_agent_status("Neutral Analyst", "in_progress")
 
-                if judge and not risk_emitted:
+                if judge:
                     risk_emitted = True
                     buf.update_agent_status("Aggressive Analyst", "completed")
                     buf.update_agent_status("Conservative Analyst", "completed")
