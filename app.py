@@ -93,7 +93,6 @@ def _agent_stage(agent_name):
 async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     """Background task that runs the TradingAgents pipeline and pushes SSE events."""
     import traceback as _tb
-    print(f"[ANALYSIS] Starting analysis {analysis_id} for {ticker}", flush=True)
     state = analyses[analysis_id]
     q = state["queue"]
     config = build_config()
@@ -101,14 +100,12 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     selected_analysts = ["market", "social", "news", "fundamentals"]
 
     try:
-        print("[ANALYSIS] Creating TradingAgentsGraph...", flush=True)
         graph = TradingAgentsGraph(
             selected_analysts=selected_analysts,
             debug=False,
             config=config,
             callbacks=[stats_handler],
         )
-        print("[ANALYSIS] Graph created successfully", flush=True)
     except Exception as e:
         print(f"[ANALYSIS] Init failed: {e}\n{_tb.format_exc()}", flush=True)
         await q.put({"type": "error", "message": f"Init failed: {e}"})
@@ -129,7 +126,6 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     prev_statuses = {}
 
     # Emit all analysts as "in_progress" immediately (they run in parallel)
-    print("[ANALYSIS] Emitting in_progress for all analysts", flush=True)
     analyst_name_map = {
         "market": "Market Analyst",
         "social": "Social Analyst",
@@ -151,13 +147,8 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
         await q.put(evt)
         prev_statuses[agent_name] = "in_progress"
 
-    print(f"[ANALYSIS] Starting graph stream, events so far: {len(state['events'])}", flush=True)
-    chunk_count = 0
     try:
         async for chunk in graph.graph.astream(init_state, **args):
-            chunk_count += 1
-            chunk_keys = [k for k in chunk if chunk.get(k) and k != "messages"]
-            print(f"[ANALYSIS] Chunk #{chunk_count}, keys with data: {chunk_keys[:10]}", flush=True)
             final_state = chunk
 
             # Process messages (same logic as Chainlit app)
@@ -230,6 +221,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                     for a in ("Bull Researcher", "Bear Researcher", "Research Manager"):
                         buf.update_agent_status(a, "completed")
                     buf.update_agent_status("Trader", "in_progress")
+                    buf.update_report_section("investment_plan", judge)
                     evt = {
                         "type": "debate",
                         "stage": "research",
@@ -246,6 +238,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                 trader_emitted = True
                 buf.update_agent_status("Trader", "completed")
                 buf.update_agent_status("Aggressive Analyst", "in_progress")
+                buf.update_report_section("trader_investment_plan", chunk["trader_investment_plan"])
                 evt = {
                     "type": "trader",
                     "stage": "trading",
@@ -289,8 +282,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                     await q.put(evt)
 
     except Exception as e:
-        import traceback as _tb2
-        print(f"[ANALYSIS] ERROR in stream loop: {e}\n{_tb2.format_exc()}", flush=True)
+        print(f"[ANALYSIS] Stream error: {e}\n{_tb.format_exc()}", flush=True)
         evt = {"type": "error", "message": str(e)}
         state["events"].append(evt)
         await q.put(evt)
@@ -302,6 +294,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     if final_state:
         decision_text = final_state.get("final_trade_decision", "No decision reached.")
         signal = graph.process_signal(decision_text)
+        buf.update_report_section("final_trade_decision", decision_text)
         for agent in buf.agent_status:
             buf.update_agent_status(agent, "completed")
         st = get_stats_dict(stats_handler, buf, start_time)
