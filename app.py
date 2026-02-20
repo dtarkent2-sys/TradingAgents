@@ -40,7 +40,7 @@ def build_config():
     """Build TradingAgents config for Anthropic/Claude."""
     config = DEFAULT_CONFIG.copy()
     config["llm_provider"] = "anthropic"
-    config["deep_think_llm"] = os.getenv("DEEP_THINK_MODEL", "claude-sonnet-4-5-20241022")
+    config["deep_think_llm"] = os.getenv("DEEP_THINK_MODEL", "claude-sonnet-4-6")
     config["quick_think_llm"] = os.getenv("QUICK_THINK_MODEL", "claude-haiku-4-5-20251001")
     config["backend_url"] = None
     config["max_debate_rounds"] = 1
