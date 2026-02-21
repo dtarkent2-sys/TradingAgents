@@ -8,17 +8,11 @@ stockstats
 langgraph
 rank-bm25
 setuptools
-backtrader
-parsel
 requests
 tqdm
 pytz
-redis
 fastapi
 uvicorn[standard]
 sse-starlette
-rich
-typer
-questionary
 langchain_anthropic
 langchain-google-genai

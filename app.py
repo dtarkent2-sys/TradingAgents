@@ -5,9 +5,10 @@ import time
 import uuid
 import asyncio
 import json
+import traceback as _tb
 from datetime import date
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -22,14 +23,34 @@ from cli.main import (
 )
 
 app = FastAPI(title="TradingAgents API")
+
+# --- CORS ---
+_cors_env = os.getenv("CORS_ORIGINS", "")
+_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Active analysis state: id -> {queue, events (replay buffer), done}
+# --- Auth dependency ---
+_API_KEY = os.getenv("AGENTS_API_KEY", "")
+
+
+async def verify_api_key(request: Request):
+    if not _API_KEY:
+        return  # dev mode — no auth
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {_API_KEY}":
+        raise HTTPException(401, "Invalid or missing API key")
+
+
+# --- Concurrency ---
+MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_ANALYSES", "3"))
+_semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+
+# Active analysis state: id -> {queue, events (replay buffer), done, created_at}
 analyses: dict[str, dict] = {}
 
 
@@ -90,9 +111,8 @@ def _agent_stage(agent_name):
     return "unknown"
 
 
-async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
-    """Background task that runs the TradingAgents pipeline and pushes SSE events."""
-    import traceback as _tb
+async def _run_analysis_inner(analysis_id: str, ticker: str, trade_date: str):
+    """Core analysis logic."""
     state = analyses[analysis_id]
     q = state["queue"]
     config = build_config()
@@ -205,8 +225,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                     state["events"].append(evt)
                     await q.put(evt)
 
-            # Research debate (guard with research_emitted to avoid resetting
-            # statuses on subsequent chunks in stream_mode="values")
+            # Research debate
             if chunk.get("investment_debate_state") and not research_emitted:
                 debate = chunk["investment_debate_state"]
                 bull = debate.get("bull_history", "").strip()
@@ -251,8 +270,7 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
                 state["events"].append(evt)
                 await q.put(evt)
 
-            # Risk debate (guard with risk_emitted to avoid resetting
-            # statuses on subsequent chunks in stream_mode="values")
+            # Risk debate
             if chunk.get("risk_debate_state") and not risk_emitted:
                 risk = chunk["risk_debate_state"]
                 agg = risk.get("aggressive_history", "").strip()
@@ -302,7 +320,6 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
         for agent in buf.agent_status:
             buf.update_agent_status(agent, "completed")
         st = get_stats_dict(stats_handler, buf, start_time)
-        # Emit agent_update for any agents not yet shown as completed on the client
         for agent, status in buf.agent_status.items():
             if prev_statuses.get(agent) != "completed":
                 prev_statuses[agent] = "completed"
@@ -329,19 +346,63 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
     await q.put(None)  # sentinel — stream done
 
 
-@app.post("/analyze")
+async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
+    """Background task: acquires semaphore, runs analysis with timeout."""
+    state = analyses[analysis_id]
+    q = state["queue"]
+    async with _semaphore:
+        try:
+            await asyncio.wait_for(
+                _run_analysis_inner(analysis_id, ticker, trade_date),
+                timeout=600,  # 10 minutes
+            )
+        except asyncio.TimeoutError:
+            print(f"[ANALYSIS] Timeout for {analysis_id}", flush=True)
+            evt = {"type": "error", "message": "Analysis timed out after 10 minutes"}
+            state["events"].append(evt)
+            await q.put(evt)
+            state["done"] = True
+            await q.put(None)
+
+
+# --- Memory cleanup background task ---
+async def _cleanup_loop():
+    """Remove analyses older than 30 minutes every 5 minutes."""
+    while True:
+        await asyncio.sleep(300)
+        now = time.time()
+        expired = [aid for aid, s in analyses.items() if now - s["created_at"] > 1800]
+        for aid in expired:
+            analyses.pop(aid, None)
+        if expired:
+            print(f"[CLEANUP] Removed {len(expired)} expired analyses", flush=True)
+
+
+@app.on_event("startup")
+async def _start_cleanup():
+    asyncio.create_task(_cleanup_loop())
+
+
+# --- Routes ---
+
+@app.post("/analyze", dependencies=[Depends(verify_api_key)])
 async def start_analysis(req: AnalyzeRequest):
     ticker = req.ticker.upper().strip()
-    if not ticker or len(ticker) > 5:
+    if not ticker or len(ticker) > 5 or not ticker.isalpha():
         raise HTTPException(400, "Invalid ticker")
     trade_date = req.date or str(date.today())
     analysis_id = str(uuid.uuid4())
-    analyses[analysis_id] = {"queue": asyncio.Queue(), "events": [], "done": False}
+    analyses[analysis_id] = {
+        "queue": asyncio.Queue(),
+        "events": [],
+        "done": False,
+        "created_at": time.time(),
+    }
     asyncio.create_task(run_analysis(analysis_id, ticker, trade_date))
     return {"id": analysis_id, "ticker": ticker, "date": trade_date}
 
 
-@app.get("/analyze/{analysis_id}/stream")
+@app.get("/analyze/{analysis_id}/stream", dependencies=[Depends(verify_api_key)])
 async def stream_analysis(analysis_id: str, last_event: int = 0):
     """Stream SSE events. Supports reconnection via ?last_event=N to replay missed events."""
     if analysis_id not in analyses:

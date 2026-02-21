@@ -1,0 +1,8 @@
+.git
+eval_results
+*.txt
+docs
+uv.lock
+__pycache__
+.env
+.env.example
