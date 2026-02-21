@@ -19,3 +19,4 @@ langchain-google-genai
 typer
 rich
 python-dotenv
+questionary
