@@ -1,6 +1,6 @@
 .git
 eval_results
-*.txt
+nvda_output*.txt
 docs
 uv.lock
 __pycache__
