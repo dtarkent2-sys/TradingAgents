@@ -13,6 +13,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+# If using Groq (or other OpenAI-compatible), set OPENAI_API_KEY for langchain
+if not os.environ.get("OPENAI_API_KEY"):
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if groq_key:
+        os.environ["OPENAI_API_KEY"] = groq_key
+
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 from cli.stats_handler import StatsCallbackHandler
@@ -60,12 +66,12 @@ class AnalyzeRequest(BaseModel):
 
 
 def build_config():
-    """Build TradingAgents config for Anthropic/Claude."""
+    """Build TradingAgents config — uses Groq (OpenAI-compatible) by default."""
     config = DEFAULT_CONFIG.copy()
-    config["llm_provider"] = "anthropic"
-    config["deep_think_llm"] = os.getenv("DEEP_THINK_MODEL", "claude-sonnet-4-6")
-    config["quick_think_llm"] = os.getenv("QUICK_THINK_MODEL", "claude-haiku-4-5-20251001")
-    config["backend_url"] = None
+    config["llm_provider"] = os.getenv("LLM_PROVIDER", "openai")
+    config["deep_think_llm"] = os.getenv("DEEP_THINK_MODEL", "llama-3.3-70b-versatile")
+    config["quick_think_llm"] = os.getenv("QUICK_THINK_MODEL", "llama-3.3-70b-versatile")
+    config["backend_url"] = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
     config["max_debate_rounds"] = 1
     config["max_risk_discuss_rounds"] = 1
     config["data_vendors"] = {
