@@ -68,10 +68,10 @@ class AnalyzeRequest(BaseModel):
 def build_config():
     """Build TradingAgents config — uses Groq (OpenAI-compatible) by default."""
     config = DEFAULT_CONFIG.copy()
-    config["llm_provider"] = os.getenv("LLM_PROVIDER", "anthropic")
-    config["deep_think_llm"] = os.getenv("DEEP_THINK_MODEL", "claude-sonnet-4-6")
-    config["quick_think_llm"] = os.getenv("QUICK_THINK_MODEL", "claude-haiku-4-5-20251001")
-    config["backend_url"] = os.getenv("LLM_BASE_URL", "https://api.anthropic.com/v1")
+    config["llm_provider"] = os.getenv("LLM_PROVIDER", "openai")
+    config["deep_think_llm"] = os.getenv("DEEP_THINK_MODEL", "deepseek-v3.1:671b-cloud")
+    config["quick_think_llm"] = os.getenv("QUICK_THINK_MODEL", "deepseek-v3.1:671b-cloud")
+    config["backend_url"] = os.getenv("LLM_BASE_URL", "https://ollama.com/v1")
     config["max_debate_rounds"] = 1
     config["max_risk_discuss_rounds"] = 1
     config["data_vendors"] = {
