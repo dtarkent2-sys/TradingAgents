@@ -68,10 +68,10 @@ class AnalyzeRequest(BaseModel):
 def build_config():
     """Build TradingAgents config — uses Groq (OpenAI-compatible) by default."""
     config = DEFAULT_CONFIG.copy()
-    config["llm_provider"] = os.getenv("LLM_PROVIDER", "openai")
-    config["deep_think_llm"] = os.getenv("DEEP_THINK_MODEL", "llama-3.3-70b-versatile")
-    config["quick_think_llm"] = os.getenv("QUICK_THINK_MODEL", "llama-3.3-70b-versatile")
-    config["backend_url"] = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
+    config["llm_provider"] = os.getenv("LLM_PROVIDER", "anthropic")
+    config["deep_think_llm"] = os.getenv("DEEP_THINK_MODEL", "claude-sonnet-4-6")
+    config["quick_think_llm"] = os.getenv("QUICK_THINK_MODEL", "claude-haiku-4-5-20251001")
+    config["backend_url"] = os.getenv("LLM_BASE_URL", "https://api.anthropic.com/v1")
     config["max_debate_rounds"] = 1
     config["max_risk_discuss_rounds"] = 1
     config["data_vendors"] = {
@@ -362,11 +362,11 @@ async def run_analysis(analysis_id: str, ticker: str, trade_date: str):
         try:
             await asyncio.wait_for(
                 _run_analysis_inner(analysis_id, ticker, trade_date),
-                timeout=600,  # 10 minutes
+                timeout=3600,  # 60 minutes
             )
         except asyncio.TimeoutError:
             print(f"[ANALYSIS] Timeout for {analysis_id}", flush=True)
-            evt = {"type": "error", "message": "Analysis timed out after 10 minutes"}
+            evt = {"type": "error", "message": "Analysis timed out after 60 minutes"}
             state["events"].append(evt)
             await q.put(evt)
             state["done"] = True
