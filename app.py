@@ -81,6 +81,7 @@ def build_config():
         "news_data": "yfinance",
     }
     config["parallel_analysts"] = True
+    print(f"[CONFIG] provider={config['llm_provider']}, deep={config['deep_think_llm']}, quick={config['quick_think_llm']}, url={config['backend_url']}", flush=True)
     return config
 
 
@@ -132,6 +133,7 @@ async def _run_analysis_inner(analysis_id: str, ticker: str, trade_date: str):
             config=config,
             callbacks=[stats_handler],
         )
+        print(f"[ANALYSIS] LLM types: deep={type(graph.deep_thinking_llm).__name__}, quick={type(graph.quick_thinking_llm).__name__}", flush=True)
     except Exception as e:
         print(f"[ANALYSIS] Init failed: {e}\n{_tb.format_exc()}", flush=True)
         await q.put({"type": "error", "message": f"Init failed: {e}"})
